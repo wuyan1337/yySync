@@ -11,7 +11,7 @@ internal class SettingsForm : Form
     private CheckBox? _autoStartCheckBox;
     private CheckBox? _closeToTrayCheckBox;
     private CheckBox? _startInTrayCheckBox;
-    private CheckBox? _showTitleIconCheckBox;
+
     private CheckBox? _showArtistNameCheckBox;
     private CheckBox? _showProgressBarCheckBox;
     private CheckBox? _enableSteamSyncCheckBox;
@@ -27,7 +27,7 @@ internal class SettingsForm : Form
     }
     private void InitializeComponent()
     {
-        Text = "设置 - Music Steam RPC";
+        Text = "设置 - yySync";
         Size = new Size(480, 550);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -110,13 +110,7 @@ internal class SettingsForm : Form
             AutoSize = true,
             BackColor = Color.White
         };
-        _showTitleIconCheckBox = new CheckBox
-        {
-            Text = "显示歌曲标题状态图标 (🎵/⏸)",
-            Location = new Point(15, 50),
-            AutoSize = true,
-            BackColor = Color.White
-        };
+
         _showArtistNameCheckBox = new CheckBox
         {
             Text = "显示歌手名称",
@@ -133,8 +127,8 @@ internal class SettingsForm : Form
         };
         _showProgressBarCheckBox.CheckedChanged += (_, _) => UpdatePreview();
         _showArtistNameCheckBox.CheckedChanged += (_, _) => UpdatePreview();
-        _showTitleIconCheckBox.CheckedChanged += (_, _) => UpdatePreview();
-        groupBox.Controls.AddRange([_enableSteamSyncCheckBox, _showTitleIconCheckBox, _showArtistNameCheckBox, _showProgressBarCheckBox]);
+
+        groupBox.Controls.AddRange([_enableSteamSyncCheckBox, _showArtistNameCheckBox, _showProgressBarCheckBox]);
         return groupBox;
     }
     private GroupBox CreateSteamPreviewGroup(ref int yOffset)
@@ -280,7 +274,7 @@ internal class SettingsForm : Form
         _originalSettings.AutoStart = isAutoStartEnabled;
         _closeToTrayCheckBox!.Checked = _originalSettings.CloseToTray;
         _startInTrayCheckBox!.Checked = _originalSettings.StartInTray;
-        _showTitleIconCheckBox!.Checked = _originalSettings.ShowTitleIcon;
+
         _showArtistNameCheckBox!.Checked = _originalSettings.ShowArtistName;
         _showProgressBarCheckBox!.Checked = _originalSettings.ShowProgressBar;
         _enableSteamSyncCheckBox!.Checked = _originalSettings.EnableSteamSync;
@@ -289,11 +283,11 @@ internal class SettingsForm : Form
     private void UpdatePreview()
     {
         if (_steamStatusPreviewLabel == null) return;
-        var showIcon = _showTitleIconCheckBox?.Checked ?? true;
+
         var showArtist = _showArtistNameCheckBox?.Checked ?? true;
         var showProgress = _showProgressBarCheckBox?.Checked ?? true;
         var preview = "";
-        if (showIcon) preview += "🎵 ";
+
         preview += "稻香";
         if (showArtist) preview += " - 周杰伦";
         if (showProgress) preview += " ▰▰▰▰▰▱▱▱▱▱ 2:30/4:15";
@@ -306,7 +300,7 @@ internal class SettingsForm : Form
         settings.AutoStart = isAutoStartChecked;
         settings.CloseToTray = _closeToTrayCheckBox!.Checked;
         settings.StartInTray = _startInTrayCheckBox!.Checked;
-        settings.ShowTitleIcon = _showTitleIconCheckBox!.Checked;
+
         settings.ShowArtistName = _showArtistNameCheckBox!.Checked;
         settings.ShowProgressBar = _showProgressBarCheckBox!.Checked;
         settings.EnableSteamSync = _enableSteamSyncCheckBox!.Checked;

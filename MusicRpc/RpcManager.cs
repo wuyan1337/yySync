@@ -24,24 +24,29 @@ internal class RpcManager(SteamStatusManager steamManager)
     private volatile bool _stateRefreshRequested;
     private const double JumpToleranceSeconds = 0.4;
     private const double DebounceWindowSeconds = 1.5;
-    private const double ProgressUpdateIntervalSeconds = 5.0;
+    private const double ProgressUpdateIntervalSeconds = 1.0;
     private DateTime _lastProgressUpdateTime = DateTime.MinValue;
+
     public void RequestStateRefresh() => _stateRefreshRequested = true;
+
     public (PlayerInfo? PlayerInfo, string PlayerName) GetCurrentPlayerInfo()
     {
         if (_netEaseState is { Player: not null, LastPolledInfo: not null })
         {
             return (_netEaseState.LastPolledInfo, "网易云音乐");
         }
+
         if (_tencentState is { Player: not null, LastPolledInfo: not null })
         {
             return (_tencentState.LastPolledInfo, "QQ音乐");
         }
+
         return _lxMusicState is { Player: not null, LastPolledInfo: not null }
             ? (_lxMusicState.LastPolledInfo, "LX Music")
             :
             (null, "");
     }
+
     public (PlayerInfo? PlayerInfo, string PlayerName, bool IsActive)[] GetAllPlayersStatus()
     {
         return
@@ -69,11 +74,13 @@ internal class RpcManager(SteamStatusManager steamManager)
             )
         ];
     }
+
     public async Task Start()
     {
         while (true)
         {
             var currentTime = DateTime.UtcNow;
+
             try
             {
                 var neteaseHwnd = Win32Api.User32.FindWindow("OrpheusBrowserHost", null);
@@ -87,6 +94,7 @@ internal class RpcManager(SteamStatusManager steamManager)
                 {
                     CleanupPlayerState(_netEaseState, "NetEase CloudMusic");
                 }
+
                 var tencentHwnd = Win32Api.User32.FindWindow("QQMusic_Daemon_Wnd", null);
                 if (tencentHwnd != IntPtr.Zero &&
                     Win32Api.User32.GetWindowThreadProcessId(tencentHwnd, out var tencentPid) != 0)
@@ -98,6 +106,7 @@ internal class RpcManager(SteamStatusManager steamManager)
                 {
                     CleanupPlayerState(_tencentState, "Tencent QQMusic");
                 }
+
                 var lxProcess = Process.GetProcessesByName("lx-music-desktop").FirstOrDefault();
                 if (lxProcess != null)
                 {
@@ -109,6 +118,7 @@ internal class RpcManager(SteamStatusManager steamManager)
                 {
                     CleanupPlayerState(_lxMusicState, "LX Music");
                 }
+
                 if (_stateRefreshRequested)
                 {
                     _stateRefreshRequested = false;
@@ -117,9 +127,10 @@ internal class RpcManager(SteamStatusManager steamManager)
                     ForceRefreshPlayer(_tencentState, "Tencent QQMusic");
                     ForceRefreshPlayer(_lxMusicState, "LX Music");
                 }
+
                 if ((currentTime - _lastProgressUpdateTime).TotalSeconds >= ProgressUpdateIntervalSeconds)
                 {
-                    UpdateProgressForActivePlayers();
+                    UpdateProgressForActivePlayers(currentTime);
                     _lastProgressUpdateTime = currentTime;
                 }
             }
@@ -134,6 +145,7 @@ internal class RpcManager(SteamStatusManager steamManager)
             }
         }
     }
+
     private async Task PollAndUpdatePlayer(PlayerState state, string playerName,
         int pid,
         Func<int, IMusicPlayer> playerFactory, DateTime currentTime)
@@ -143,9 +155,12 @@ internal class RpcManager(SteamStatusManager steamManager)
             Debug.WriteLine($"[{playerName}] Player process detected. Creating instance.");
             state.Player = playerFactory(pid);
         }
+
         var currentInfo = await state.Player.GetPlayerInfoAsync();
+
         var isStateChanged = DetectStateChange(currentInfo, state.LastPolledInfo, currentTime, state.LastPollTime,
             JumpToleranceSeconds);
+
         if (isStateChanged)
         {
             Debug.WriteLine(
@@ -153,6 +168,7 @@ internal class RpcManager(SteamStatusManager steamManager)
             state.PendingUpdateInfo = currentInfo;
             state.LastChangeDetectedTime = currentTime;
         }
+
         if (state.PendingUpdateInfo is not null &&
             (currentTime - state.LastChangeDetectedTime).TotalSeconds > DebounceWindowSeconds)
         {
@@ -160,18 +176,21 @@ internal class RpcManager(SteamStatusManager steamManager)
             await UpdateOrClearSteamStatusAsync(state.PendingUpdateInfo, playerName);
             state.PendingUpdateInfo = null;
         }
+
         state.LastPolledInfo = currentInfo;
         state.LastPollTime = currentTime;
     }
+
     private void CleanupPlayerState(PlayerState state, string playerName)
     {
         if (state.Player is null) return;
         Debug.WriteLine($"[{playerName}] Player process lost. Clearing instance and Steam status.");
-        steamManager.ClearStatus();  
+        steamManager.ClearStatus(); // Clear status immediately when player exits
         state.Player = null;
         state.LastPolledInfo = null;
         state.PendingUpdateInfo = null;
     }
+
     private async void ForceRefreshPlayer(PlayerState state, string playerName)
     {
         if (state.Player is not null)
@@ -179,23 +198,29 @@ internal class RpcManager(SteamStatusManager steamManager)
             await UpdateOrClearSteamStatusAsync(state.LastPolledInfo, playerName);
         }
     }
+
     private void ClearAllPlayers()
     {
         CleanupPlayerState(_netEaseState, "NetEase CloudMusic");
         CleanupPlayerState(_tencentState, "Tencent QQMusic");
         CleanupPlayerState(_lxMusicState, "LX Music");
     }
+
     private static bool DetectStateChange(PlayerInfo? current, PlayerInfo? last, DateTime currentTime,
         DateTime lastTime, double tolerance)
     {
         if ((current is null && last is not null) || (current is not null && last is null)) return true;
         if (current is not { } c || last is not { } l) return false;
+
         if (c.Identity != l.Identity || c.Pause != l.Pause) return true;
+
         if (c.Pause) return false;
+
         var elapsed = (currentTime - lastTime).TotalSeconds;
         var progressDelta = c.Schedule - l.Schedule;
         return Math.Abs(progressDelta - elapsed) > tolerance;
     }
+
     private async Task UpdateOrClearSteamStatusAsync(PlayerInfo? info, string playerName)
     {
         if (info is not { } playerInfo)
@@ -203,18 +228,49 @@ internal class RpcManager(SteamStatusManager steamManager)
             steamManager.ClearStatus();
             return;
         }
+
         Debug.WriteLine(
             $"pause: {playerInfo.Pause}, progress: {playerInfo.Schedule}, duration: {playerInfo.Duration}");
         Debug.WriteLine(
             $"id: {playerInfo.Identity}, name: {playerInfo.Title}, singer: {playerInfo.Artists}, album: {playerInfo.Album}");
+
         await steamManager.UpdateStatusAsync(info, playerName);
     }
-    private async void UpdateProgressForActivePlayers()
+
+    private async void UpdateProgressForActivePlayers(DateTime currentTime)
     {
-        var (info, playerName) = GetCurrentPlayerInfo();
-        if (info is { Pause: false })
+        PlayerState? activeState = null;
+        string activePlayerName = "";
+
+        if (_netEaseState is { Player: not null, LastPolledInfo: not null })
         {
-            await steamManager.UpdateStatusAsync(info, playerName);
+            activeState = _netEaseState;
+            activePlayerName = "网易云音乐";
+        }
+        else if (_tencentState is { Player: not null, LastPolledInfo: not null })
+        {
+            activeState = _tencentState;
+            activePlayerName = "QQ音乐";
+        }
+        else if (_lxMusicState is { Player: not null, LastPolledInfo: not null })
+        {
+            activeState = _lxMusicState;
+            activePlayerName = "LX Music";
+        }
+
+        if (activeState?.LastPolledInfo is { Pause: false } info)
+        {
+            // Calculate elapsed time since last poll to interpolate current progress
+            var elapsedSincePoll = (currentTime - activeState.LastPollTime).TotalSeconds;
+            var interpolatedSchedule = info.Schedule + elapsedSincePoll;
+            
+            // Clamp the schedule to ensure it doesn't exceed duration
+            var clampedSchedule = Math.Min(interpolatedSchedule, info.Duration);
+
+            // Create a new PlayerInfo with the updated schedule
+            var updatedInfo = info with { Schedule = clampedSchedule };
+
+            await steamManager.UpdateStatusAsync(updatedInfo, activePlayerName);
         }
     }
 }

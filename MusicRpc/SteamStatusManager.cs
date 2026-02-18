@@ -46,7 +46,7 @@ internal class SteamStatusManager
     {
         if (info is not { } playerInfo)
         {
-            return "Music Steam RPC";
+            return "yySync";
         }
         var sb = new System.Text.StringBuilder();
         sb.Append(playerInfo.Title);

@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace MusicRpc;
 internal class ConfigData
 {
-    public bool ShowTitleIcon { get; set; } = true;
+
     public bool AutoStart { get; set; }
     public bool CloseToTray { get; set; } = true;
     public bool StartInTray { get; set; }
@@ -29,7 +29,7 @@ internal class Configurations
     {
         Settings = new ConfigData();
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MusicSteamRPC");
+            "yySync");
         Directory.CreateDirectory(dir);
         _path = Path.Combine(dir, "config.json");
         if (File.Exists(_path))

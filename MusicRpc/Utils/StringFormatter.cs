@@ -30,11 +30,7 @@ internal static class StringFormatter
         var sb = StringBuilderPool.Get();
         try
         {
-            var titleIcon = config.Settings.ShowTitleIcon 
-                ? (info.Pause ? "⏸ " : "🎵 ") 
-                : string.Empty;
-            sb.Append(titleIcon)
-              .Append(info.Title)
+            sb.Append(info.Title)
               .Append(ZeroWidthSpace);
             var formattedTitle = StringUtils.GetTruncatedStringByMaxByteLength(sb.ToString(), 128);
             sb.Clear();

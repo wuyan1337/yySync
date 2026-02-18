@@ -21,10 +21,10 @@ internal static class Program
         MemoryProfiler.LogMemorySnapshot("程序启动前");
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        using var mutex = new Mutex(true, "MusicSteamRpc", out var isNewInstance);
+        using var mutex = new Mutex(true, "yySyncMutex", out var isNewInstance);
         if (!isNewInstance)
         {
-            MessageBox.Show("Music Steam RPC is already running.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("yySync is already running.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
         using var cts = new CancellationTokenSource();
@@ -125,7 +125,7 @@ internal static class Program
         var notifyIcon = new NotifyIcon
         {
             Icon = AppResource.Icon,
-            Text = "Music Steam RPC",
+            Text = "yySync",
             ContextMenuStrip = contextMenu
         };
         notifyIcon.DoubleClick += (_, _) =>
@@ -186,6 +186,6 @@ internal static class Program
     }
     public static void ShowMinimizeToTrayNotification()
     {
-        TrayIcon?.ShowBalloonTip(1000, "应用仍在运行", "Music Steam RPC 已最小化到托盘区域。", ToolTipIcon.Info);
+        TrayIcon?.ShowBalloonTip(1000, "应用仍在运行", "yySync 已最小化到托盘区域。", ToolTipIcon.Info);
     }
 }

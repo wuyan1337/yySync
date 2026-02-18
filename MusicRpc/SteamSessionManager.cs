@@ -192,20 +192,12 @@ internal class SteamSessionManager : IDisposable
         Configurations.Instance.Save();
         return false;
     }
-    public async Task SetGameNameAsync(string gameName)
+    public Task SetGameNameAsync(string gameName)
     {
-        if (!IsLoggedOn || _steamClient == null) return;
-        if (gameName == _currentGameName) return;
+        if (!IsLoggedOn || _steamClient == null) return Task.CompletedTask;
+        if (gameName == _currentGameName) return Task.CompletedTask;
         Debug.WriteLine($"[SteamSession] 正在设置游戏名称: '{gameName}'");
-        var emptyRequest = new ClientMsgProtobuf<CMsgClientGamesPlayed>(EMsg.ClientGamesPlayedWithDataBlob)
-        {
-            Body =
-            {
-                client_os_type = unchecked((uint)EOSType.Windows10)
-            }
-        };
-        _steamClient.Send(emptyRequest);
-        await Task.Delay(500).ConfigureAwait(false);
+
         if (!string.IsNullOrEmpty(gameName))
         {
             var request = new ClientMsgProtobuf<CMsgClientGamesPlayed>(EMsg.ClientGamesPlayedWithDataBlob)
@@ -228,6 +220,7 @@ internal class SteamSessionManager : IDisposable
             Debug.WriteLine($"[SteamSession] CMsgClientGamesPlayed 已发送: '{gameName}'");
         }
         _currentGameName = gameName;
+        return Task.CompletedTask;
     }
     public void ClearGameName()
     {

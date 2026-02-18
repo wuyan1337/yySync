@@ -6,7 +6,7 @@
         <ImplicitUsings>disable</ImplicitUsings>
         <LangVersion>13</LangVersion>
         <Nullable>enable</Nullable>
-        <AssemblyName>MusicRpc</AssemblyName>
+        <AssemblyName>yySync</AssemblyName>
         <RootNamespace>MusicRpc</RootNamespace>
         <VersionPrefix>1.0</VersionPrefix>
         <VersionSuffix>1</VersionSuffix>
@@ -19,8 +19,8 @@
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
         <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
         <Authors>Kyle, kri_YamiHikari</Authors>
-        <Product>Music Steam RPC</Product>
-        <Title>Music Steam RPC</Title>
+        <Product>yySync</Product>
+        <Title>yySync</Title>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

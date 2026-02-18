@@ -183,7 +183,7 @@ internal class MainForm : Form
     }
     private void SetupForm()
     {
-        Text = "Music Steam RPC - 播放器状态";
+        Text = "yySync - 播放器状态";
         Size = new Size(620, 570);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
