@@ -30,6 +30,11 @@ internal sealed class NetEase : IMusicPlayer
     private const string AudioPlayerPattern
         = "48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8D 0D ? ? ? ? E8 ? ? ? ? 90 48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8D 05 ? ? ? ? 48 8D A5 ? ? ? ? 5F 5D C3 CC CC CC CC CC 48 89 4C 24 ? 55 57 48 81 EC ? ? ? ? 48 8D 6C 24 ? 48 8D 7C 24";
     private const string AudioSchedulePattern = "66 0F 2E 0D ? ? ? ? 7A ? 75 ? 66 0F 2E 15";
+    
+    private readonly nint _cloudMusicDllBase;
+    private const int Offset_Legacy_2_10_13 = 0xB2B124;
+    private readonly bool _isLegacyMemoryMode;
+
     public NetEase(int pid)
     {
         var fileDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -38,11 +43,14 @@ internal sealed class NetEase : IMusicPlayer
         _fmPlayPath = Path.Combine(fileDirectory, "fmPlay");
         _lastPlaylistWriteTime = DateTime.MinValue;
         _lastFmPlayWriteTime = DateTime.MinValue;
+
         var moduleBaseAddress = ProcessUtils.GetModuleBaseAddress(pid, "cloudmusic.dll");
         if (moduleBaseAddress == IntPtr.Zero)
         {
             throw new DllNotFoundException("Could not find cloudmusic.dll in the target process.");
         }
+        _cloudMusicDllBase = moduleBaseAddress;
+
         _process = new ProcessMemory(pid);
         if (Memory.FindPattern(AudioPlayerPattern, pid, moduleBaseAddress, out var app))
         {
@@ -50,40 +58,142 @@ internal sealed class NetEase : IMusicPlayer
             var displacement = _process.ReadInt32(textAddress);
             _audioPlayerPointer = textAddress + displacement + sizeof(int);
         }
+
         if (Memory.FindPattern(AudioSchedulePattern, pid, moduleBaseAddress, out var asp))
         {
             var textAddress = nint.Add(asp, 4);
             var displacement = _process.ReadInt32(textAddress);
             _schedulePointer = textAddress + displacement + sizeof(int);
         }
-        if (_audioPlayerPointer == nint.Zero)
+
+        if (_audioPlayerPointer == nint.Zero || _schedulePointer == nint.Zero)
         {
-            throw new EntryPointNotFoundException("Failed to find AudioPlayer pointer.");
-        }
-        if (_schedulePointer == nint.Zero)
-        {
-            throw new EntryPointNotFoundException("Failed to find Scheduler pointer.");
+            _isLegacyMemoryMode = true;
+            Debug.WriteLine("[NetEase] Memory pattern mismatch. Using Legacy Memory Mode (2.10.13+).");
         }
     }
+
     public Task<PlayerInfo?> GetPlayerInfoAsync()
     {
+        if (_isLegacyMemoryMode)
+        {
+            return Task.FromResult(GetLegacyMemoryPlayerInfo());
+        }
+
         var status = GetPlayerStatus();
         if (status == PlayStatus.Waiting)
         {
             return Task.FromResult<PlayerInfo?>(null);
         }
+
         var identity = GetCurrentSongId();
         if (string.IsNullOrEmpty(identity))
         {
             return Task.FromResult<PlayerInfo?>(null);
         }
+
         var playerInfo = UpdateAndSearchPlaylist(identity, status);
         if (playerInfo != null)
         {
             return Task.FromResult(playerInfo);
         }
+
         playerInfo = UpdateAndSearchFmPlaylist(identity, status);
         return Task.FromResult(playerInfo);
+    }
+
+    private PlayerInfo? GetLegacyMemoryPlayerInfo()
+    {
+        try
+        {
+            // Chain: [Base + 0xB2B124] -> Ptr1 -> String
+            var ptr1 = _process.ReadInt32(_cloudMusicDllBase, Offset_Legacy_2_10_13);
+            if (ptr1 == 0) return GetLegacyWindowPlayerInfo(); // Fallback to window title if memory read fails
+
+            var stringAddr = _process.ReadInt32((nint)ptr1);
+            if (stringAddr == 0) return GetLegacyWindowPlayerInfo();
+
+            // Read Unicode string
+            var buffer = _process.ReadBytes((nint)stringAddr, 256);
+            var title = Encoding.Unicode.GetString(buffer);
+            var nullIndex = title.IndexOf('\0');
+            if (nullIndex >= 0) title = title.Substring(0, nullIndex);
+
+            if (string.IsNullOrEmpty(title)) return GetLegacyWindowPlayerInfo();
+
+            // Try to get artist from window title as current memory offset only gives title
+            string artist = "Unknown Artist";
+            using (var process = Process.GetProcessById(_process.ProcessId))
+            {
+                 var winTitle = process.MainWindowTitle;
+                 if (!string.IsNullOrEmpty(winTitle) && winTitle.Contains(" - "))
+                 {
+                     var parts = winTitle.Split(" - ");
+                     if (parts.Length > 1) artist = parts[1];
+                 }
+            }
+
+            var songTitle = title;
+            if (!string.IsNullOrEmpty(title) && title.Contains(" - "))
+            {
+                var p = title.Split(new[] { " - " }, StringSplitOptions.None);
+                if (p.Length > 0) songTitle = p[0];
+            }
+
+            return new PlayerInfo
+            {
+                Identity = "mem_" + title.GetHashCode(),
+                Title = songTitle,
+                Artists = artist,
+                Album = "NetEase Cloud Music",
+                Cover = "",
+                Duration = 0,
+                Schedule = 0,
+                Pause = false,
+                Url = ""
+            };
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[NetEase] Legacy memory mode error: {ex.Message}");
+            return GetLegacyWindowPlayerInfo();
+        }
+    }
+
+    private PlayerInfo? GetLegacyWindowPlayerInfo()
+    {
+        try
+        {
+            using var process = Process.GetProcessById(_process.ProcessId);
+            var title = process.MainWindowTitle;
+            
+            if (string.IsNullOrEmpty(title) || title == "网易云音乐" || title == "NetEase Cloud Music")
+            {
+                return null; 
+            }
+
+            var parts = title.Split(" - ");
+            var song = parts.Length > 0 ? parts[0] : title;
+            var artist = parts.Length > 1 ? parts[1] : "Unknown Artist";
+
+            return new PlayerInfo
+            {
+                Identity = "legacy_" + title.GetHashCode(),
+                Title = song,
+                Artists = artist,
+                Album = "NetEase Cloud Music",
+                Cover = "",
+                Duration = 0,
+                Schedule = 0,
+                Pause = false,
+                Url = "" 
+            };
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[NetEase] Legacy window mode error: {ex.Message}");
+            return null;
+        }
     }
     private PlayerInfo? UpdateAndSearchPlaylist(string identity, PlayStatus status)
     {

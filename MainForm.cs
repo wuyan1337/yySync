@@ -227,8 +227,8 @@ internal class MainForm : Form
             var allPlayersStatus = rpcManager.GetAllPlayersStatus();
             for (var i = 0; i < 3; i++)
             {
-                var (playerInfo, playerName, isActive, isPermissionDenied) = allPlayersStatus[i];
-                UpdatePlayerDisplay(i, playerInfo, playerName, isActive, forceRefresh, isPermissionDenied);
+                var (playerInfo, playerName, isActive, lastError) = allPlayersStatus[i];
+                UpdatePlayerDisplay(i, playerInfo, playerName, isActive, forceRefresh, lastError);
             }
             ImageCacheManager.SetActiveKeys(_currentCacheKeys.Where(k => !string.IsNullOrEmpty(k)));
             _lastUpdateLabel.Text = $"最后更新: {DateTime.Now:HH:mm:ss}";
@@ -239,11 +239,11 @@ internal class MainForm : Form
         }
     }
     private void UpdatePlayerDisplay(int index, PlayerInfo? playerInfo, string playerName, bool isActive,
-        bool forceRefresh, bool isPermissionDenied)
+        bool forceRefresh, RpcManager.ErrorCode lastError)
     {
         var lastInfo = _lastPlayerInfos[index];
         var lastActive = _lastActiveStates[index];
-        if (!forceRefresh && lastActive == isActive && !isPermissionDenied)
+        if (!forceRefresh && lastActive == isActive && lastError == RpcManager.ErrorCode.None)
         {
             if (!isActive) return; 
             if (lastInfo.HasValue && playerInfo.HasValue &&
@@ -341,22 +341,30 @@ internal class MainForm : Form
             if (_songTitleLabels[index].Text != defaultTitle) _songTitleLabels[index].Text = defaultTitle;
             if (_artistLabels[index].Text != "") _artistLabels[index].Text = "";
             if (_albumLabels[index].Text != "") _albumLabels[index].Text = "";
-            if (isPermissionDenied)
+            
+            string statusText;
+            switch (lastError)
             {
-                 if (_statusLabels[index].Text != "⚠️ 需要管理员运行")
-                 {
-                     _statusLabels[index].Text = "⚠️ 需要管理员运行";
-                     _statusLabels[index].ForeColor = Color.Red;
-                 }
+                case RpcManager.ErrorCode.PermissionDenied:
+                    statusText = "⚠️ 需要管理员运行";
+                    break;
+                case RpcManager.ErrorCode.DllNotFound:
+                    statusText = "⚠️ 缺少组件(DLL)";
+                    break;
+                case RpcManager.ErrorCode.VersionNotSupported:
+                    statusText = "⚠️ 版本不支持/特征码失效";
+                    break;
+                default:
+                    statusText = "未运行";
+                    break;
             }
-            else
+            
+            if (_statusLabels[index].Text != statusText)
             {
-                if (_statusLabels[index].Text != "未运行")
-                {
-                    _statusLabels[index].Text = "未运行";
-                    _statusLabels[index].ForeColor = Color.Gray;
-                }
+                _statusLabels[index].Text = statusText;
+                _statusLabels[index].ForeColor = lastError != RpcManager.ErrorCode.None ? Color.Red : Color.Gray;
             }
+
             if (_progressBars[index].Value != 0) _progressBars[index].Value = 0;
             if (_progressLabels[index].Text != "00:00 / 00:00") _progressLabels[index].Text = "00:00 / 00:00";
             if (_coverPictureBoxes[index].Image != null)

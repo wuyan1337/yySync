@@ -134,11 +134,13 @@ internal static class Memory
 internal sealed partial class ProcessMemory(nint process) : IDisposable
 {
     private bool _disposed;
+    public int ProcessId { get; }
     public ProcessMemory(int processId) : this(OpenProcess(
         0x0010, 
         false, 
         processId))
     {
+        ProcessId = processId;
     }
     public void Dispose()
     {

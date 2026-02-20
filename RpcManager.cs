@@ -17,7 +17,15 @@ internal class RpcManager(SteamStatusManager steamManager)
         public DateTime LastPollTime { get; set; } = DateTime.MinValue;
         public PlayerInfo? PendingUpdateInfo { get; set; }
         public DateTime LastChangeDetectedTime { get; set; } = DateTime.MinValue;
-        public bool PermissionDenied { get; set; }
+        public ErrorCode LastError { get; set; } = ErrorCode.None;
+    }
+
+    public enum ErrorCode
+    {
+        None,
+        PermissionDenied,
+        DllNotFound,
+        VersionNotSupported
     }
     private readonly PlayerState _netEaseState = new();
     private readonly PlayerState _tencentState = new();
@@ -43,7 +51,7 @@ internal class RpcManager(SteamStatusManager steamManager)
             :
             (null, "");
     }
-    public (PlayerInfo? PlayerInfo, string PlayerName, bool IsActive, bool IsPermissionDenied)[] GetAllPlayersStatus()
+    public (PlayerInfo? PlayerInfo, string PlayerName, bool IsActive, ErrorCode LastError)[] GetAllPlayersStatus()
     {
         return
         [
@@ -53,7 +61,7 @@ internal class RpcManager(SteamStatusManager steamManager)
                     : null,
                 "网易云音乐",
                 _netEaseState.Player != null,
-                _netEaseState.PermissionDenied
+                _netEaseState.LastError
             ),
             (
                 _tencentState is { Player: not null, LastPolledInfo: not null }
@@ -61,7 +69,7 @@ internal class RpcManager(SteamStatusManager steamManager)
                     : null,
                 "QQ音乐",
                 _tencentState.Player != null,
-                _tencentState.PermissionDenied
+                _tencentState.LastError
             ),
             (
                 _lxMusicState is { Player: not null, LastPolledInfo: not null }
@@ -69,7 +77,7 @@ internal class RpcManager(SteamStatusManager steamManager)
                     : null,
                 "LX Music",
                 _lxMusicState.Player != null,
-                _lxMusicState.PermissionDenied
+                _lxMusicState.LastError
             )
         ];
     }
@@ -88,27 +96,28 @@ internal class RpcManager(SteamStatusManager steamManager)
                     {
                         await PollAndUpdatePlayer(_netEaseState, "NetEase CloudMusic", neteasePid,
                             pid => new NetEase(pid), currentTime);
-                        _netEaseState.PermissionDenied = false;
+                        _netEaseState.LastError = ErrorCode.None;
                     }
                     catch (DllNotFoundException)
                     {
-                        _netEaseState.PermissionDenied = true;
+                        _netEaseState.LastError = ErrorCode.PermissionDenied;
                         Debug.WriteLine("[NetEase] Permission denied (DllNotFound).");
                     }
                     catch (EntryPointNotFoundException)
                     {
-                        _netEaseState.PermissionDenied = true;
+                        _netEaseState.LastError = ErrorCode.None;
                          Debug.WriteLine("[NetEase] Permission denied (EntryPointNotFound).");
                     }
                     catch (Exception ex)
                     {
                          Debug.WriteLine($"[NetEase] Error: {ex.Message}");
+                         _netEaseState.LastError = ErrorCode.None; 
                     }
                 }
                 else
                 {
                     CleanupPlayerState(_netEaseState, "NetEase CloudMusic");
-                     _netEaseState.PermissionDenied = false;
+                     _netEaseState.LastError = ErrorCode.None;
                 }
                 var tencentHwnd = Win32Api.User32.FindWindow("QQMusic_Daemon_Wnd", null);
                 if (tencentHwnd != IntPtr.Zero &&
@@ -118,27 +127,28 @@ internal class RpcManager(SteamStatusManager steamManager)
                     {
                         await PollAndUpdatePlayer(_tencentState, "Tencent QQMusic", tencentPid,
                             pid => new Tencent(pid), currentTime);
-                        _tencentState.PermissionDenied = false;
+                        _tencentState.LastError = ErrorCode.None;
                     }
                     catch (DllNotFoundException)
                     {
-                         _tencentState.PermissionDenied = true;
+                         _tencentState.LastError = ErrorCode.PermissionDenied;
                          Debug.WriteLine("[Tencent] Permission denied (DllNotFound).");
                     }
                     catch (EntryPointNotFoundException)
                     {
-                        _tencentState.PermissionDenied = true;
+                        _tencentState.LastError = ErrorCode.None;
                         Debug.WriteLine("[Tencent] Permission denied (EntryPointNotFound).");
                     }
                      catch (Exception ex)
                     {
                          Debug.WriteLine($"[Tencent] Error: {ex.Message}");
+                         _tencentState.LastError = ErrorCode.None;
                     }
                 }
                 else
                 {
                     CleanupPlayerState(_tencentState, "Tencent QQMusic");
-                    _tencentState.PermissionDenied = false;
+                    _tencentState.LastError = ErrorCode.None;
                 }
                 var lxProcess = Process.GetProcessesByName("lx-music-desktop").FirstOrDefault();
                 if (lxProcess != null)
@@ -148,21 +158,22 @@ internal class RpcManager(SteamStatusManager steamManager)
                         await PollAndUpdatePlayer(_lxMusicState, "LX Music", lxProcess.Id,
                             pid => new LxMusic(pid),
                             currentTime);
-                        _lxMusicState.PermissionDenied = false;
+                        _lxMusicState.LastError = ErrorCode.None;
                      }
                      catch (DllNotFoundException)
                      {
-                         _lxMusicState.PermissionDenied = true;
+                         _lxMusicState.LastError = ErrorCode.PermissionDenied;
                      }
                       catch (Exception ex)
                     {
                          Debug.WriteLine($"[LX Music] Error: {ex.Message}");
+                         _lxMusicState.LastError = ErrorCode.None;
                     }
                 }
                 else
                 {
                     CleanupPlayerState(_lxMusicState, "LX Music");
-                    _lxMusicState.PermissionDenied = false;
+                    _lxMusicState.LastError = ErrorCode.None;
                 }
                 if (_stateRefreshRequested)
                 {
