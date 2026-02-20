@@ -48,7 +48,7 @@ internal static class Memory
                         ModuleCache[(processId, moduleBaseAddress)] = cacheEntry;
                         break;
                     }
-                    cursor += 40; 
+                    cursor += 40;
                 }
             }
             catch (Exception)
@@ -136,7 +136,7 @@ internal sealed partial class ProcessMemory(nint process) : IDisposable
     private bool _disposed;
     public int ProcessId { get; }
     public ProcessMemory(int processId) : this(OpenProcess(
-        0x0010, 
+        0x0010,
         false, 
         processId))
     {

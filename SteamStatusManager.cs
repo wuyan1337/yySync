@@ -77,6 +77,10 @@ internal class SteamStatusManager
         {
             return "yySync";
         }
+        var prefix = config.EnableCustomPrefix && !string.IsNullOrEmpty(config.CustomPrefix)
+            ? config.CustomPrefix
+            : string.Empty;
+        var prefixBytes = GetUtf8ByteCount(prefix);
         var title = playerInfo.Title;
         var artistPart = string.Empty;
         var progressPart = string.Empty;
@@ -99,20 +103,21 @@ internal class SteamStatusManager
         {
             progressPart = " (Paused)"; 
         }
+        var contentMaxBytes = 63 - prefixBytes;
+        if (contentMaxBytes <= 0) return TruncateToUtf8ByteLength(prefix, 63);
         var fullString = $"{title}{artistPart}{progressPart}";
-        const int maxBytes = 63;
-        if (GetUtf8ByteCount(fullString) <= maxBytes) return fullString;
+        if (GetUtf8ByteCount(fullString) <= contentMaxBytes) return $"{prefix}{fullString}";
         if (config.StatusPriority == SteamStatusPriority.Artist)
         {
             var artistString = $"{title}{artistPart}";
-            if (GetUtf8ByteCount(artistString) <= maxBytes) return artistString;
-            return TruncateToUtf8ByteLength(title, maxBytes);
+            if (GetUtf8ByteCount(artistString) <= contentMaxBytes) return $"{prefix}{artistString}";
+            return $"{prefix}{TruncateToUtf8ByteLength(title, contentMaxBytes)}";
         }
         else  
         {
             var progressString = $"{title}{progressPart}";
-             if (GetUtf8ByteCount(progressString) <= maxBytes) return progressString;
-             return TruncateToUtf8ByteLength(title, maxBytes);
+            if (GetUtf8ByteCount(progressString) <= contentMaxBytes) return $"{prefix}{progressString}";
+            return $"{prefix}{TruncateToUtf8ByteLength(title, contentMaxBytes)}";
         }
     }
     private static string FormatTime(double totalSeconds)

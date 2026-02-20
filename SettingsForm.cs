@@ -16,6 +16,8 @@ internal class SettingsForm : Form
     private CheckBox? _enableSteamSyncCheckBox;
     private RadioButton? _priorityArtistRadioButton;
     private RadioButton? _priorityProgressBarRadioButton;
+    private CheckBox? _enableCustomPrefixCheckBox;
+    private TextBox? _customPrefixTextBox;
     private Label? _steamStatusPreviewLabel;
     private Button? _okButton;
     private Button? _cancelButton;
@@ -100,10 +102,10 @@ internal class SettingsForm : Form
         {
             Text = "Steam 显示设置",
             Location = new Point(GetHorizontalCenterOffset(410), yOffset),
-            Size = new Size(410, 185),  
+            Size = new Size(410, 235),  
             BackColor = Color.White
         };
-        yOffset += 195;  
+        yOffset += 245;  
         _enableSteamSyncCheckBox = new CheckBox
         {
             Text = "启用 Steam 同步",
@@ -111,17 +113,37 @@ internal class SettingsForm : Form
             AutoSize = true,
             BackColor = Color.White
         };
+        _enableCustomPrefixCheckBox = new CheckBox
+        {
+            Text = "自定义前缀",
+            Location = new Point(15, 50),
+            AutoSize = true,
+            BackColor = Color.White
+        };
+        _customPrefixTextBox = new TextBox
+        {
+            Location = new Point(130, 48),
+            Size = new Size(260, 22),
+            PlaceholderText = "例如：正在听：",
+            Enabled = false
+        };
+        _enableCustomPrefixCheckBox.CheckedChanged += (_, _) =>
+        {
+            _customPrefixTextBox.Enabled = _enableCustomPrefixCheckBox.Checked;
+            UpdatePreview();
+        };
+        _customPrefixTextBox.TextChanged += (_, _) => UpdatePreview();
         _showArtistNameCheckBox = new CheckBox
         {
             Text = "显示歌手名称",
-            Location = new Point(15, 75),
+            Location = new Point(15, 80),
             AutoSize = true,
             BackColor = Color.White
         };
         _showProgressBarCheckBox = new CheckBox
         {
             Text = "显示进度条 (▰▰▰▱▱▱ 2:30/4:15)",
-            Location = new Point(15, 100),
+            Location = new Point(15, 105),
             AutoSize = true,
             BackColor = Color.White
         };
@@ -130,21 +152,21 @@ internal class SettingsForm : Form
         var priorityLabel = new Label
         {
             Text = "字数过多时优先显示:",
-            Location = new Point(15, 130),
+            Location = new Point(15, 135),
             AutoSize = true,
             BackColor = Color.White
         };
         _priorityArtistRadioButton = new RadioButton
         {
             Text = "歌手名称",
-            Location = new Point(160, 128),
+            Location = new Point(160, 133),
             AutoSize = true,
             BackColor = Color.White
         };
         _priorityProgressBarRadioButton = new RadioButton
         {
             Text = "进度条",
-            Location = new Point(250, 128),
+            Location = new Point(250, 133),
             AutoSize = true,
             BackColor = Color.White
         };
@@ -152,6 +174,8 @@ internal class SettingsForm : Form
         _priorityProgressBarRadioButton.CheckedChanged += (_, _) => UpdatePreview();
         groupBox.Controls.AddRange([
             _enableSteamSyncCheckBox, 
+            _enableCustomPrefixCheckBox,
+            _customPrefixTextBox,
             _showArtistNameCheckBox, 
             _showProgressBarCheckBox,
             priorityLabel,
@@ -306,6 +330,9 @@ internal class SettingsForm : Form
         _showArtistNameCheckBox!.Checked = _originalSettings.ShowArtistName;
         _showProgressBarCheckBox!.Checked = _originalSettings.ShowProgressBar;
         _enableSteamSyncCheckBox!.Checked = _originalSettings.EnableSteamSync;
+        _enableCustomPrefixCheckBox!.Checked = _originalSettings.EnableCustomPrefix;
+        _customPrefixTextBox!.Text = _originalSettings.CustomPrefix;
+        _customPrefixTextBox.Enabled = _originalSettings.EnableCustomPrefix;
         if (_originalSettings.StatusPriority == SteamStatusPriority.Artist)
         {
             _priorityArtistRadioButton!.Checked = true;
@@ -338,7 +365,9 @@ internal class SettingsForm : Form
         {
             ShowArtistName = showArtist,
             ShowProgressBar = showProgress,
-            StatusPriority = _priorityArtistRadioButton?.Checked == true ? SteamStatusPriority.Artist : SteamStatusPriority.ProgressBar
+            StatusPriority = _priorityArtistRadioButton?.Checked == true ? SteamStatusPriority.Artist : SteamStatusPriority.ProgressBar,
+            EnableCustomPrefix = _enableCustomPrefixCheckBox?.Checked ?? false,
+            CustomPrefix = _customPrefixTextBox?.Text ?? ""
         });
     }
     private void SaveSettings()
@@ -351,6 +380,8 @@ internal class SettingsForm : Form
         settings.ShowArtistName = _showArtistNameCheckBox!.Checked;
         settings.ShowProgressBar = _showProgressBarCheckBox!.Checked;
         settings.EnableSteamSync = _enableSteamSyncCheckBox!.Checked;
+        settings.EnableCustomPrefix = _enableCustomPrefixCheckBox!.Checked;
+        settings.CustomPrefix = _customPrefixTextBox!.Text;
         settings.StatusPriority = _priorityArtistRadioButton!.Checked ? SteamStatusPriority.Artist : SteamStatusPriority.ProgressBar;
         Configurations.Instance.Save();
         Program.GetRpcManager()?.RequestStateRefresh();

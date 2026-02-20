@@ -106,14 +106,12 @@ internal sealed class NetEase : IMusicPlayer
     {
         try
         {
-            // Chain: [Base + 0xB2B124] -> Ptr1 -> String
             var ptr1 = _process.ReadInt32(_cloudMusicDllBase, Offset_Legacy_2_10_13);
-            if (ptr1 == 0) return GetLegacyWindowPlayerInfo(); // Fallback to window title if memory read fails
+            if (ptr1 == 0) return GetLegacyWindowPlayerInfo();
 
             var stringAddr = _process.ReadInt32((nint)ptr1);
             if (stringAddr == 0) return GetLegacyWindowPlayerInfo();
 
-            // Read Unicode string
             var buffer = _process.ReadBytes((nint)stringAddr, 256);
             var title = Encoding.Unicode.GetString(buffer);
             var nullIndex = title.IndexOf('\0');
@@ -121,7 +119,6 @@ internal sealed class NetEase : IMusicPlayer
 
             if (string.IsNullOrEmpty(title)) return GetLegacyWindowPlayerInfo();
 
-            // Try to get artist from window title as current memory offset only gives title
             string artist = "Unknown Artist";
             using (var process = Process.GetProcessById(_process.ProcessId))
             {
@@ -369,7 +366,6 @@ internal sealed class NetEase : IMusicPlayer
             return false;
         }
     }
-    #region Unsafe
     private enum PlayStatus
     {
         Waiting,
@@ -410,7 +406,6 @@ internal sealed class NetEase : IMusicPlayer
         var str = Encoding.UTF8.GetString(strBuffer);
         return string.IsNullOrEmpty(str) ? string.Empty : str[..str.IndexOf('_')];
     }
-    #endregion
 }
 internal record NetEasePlaylistTrackArtist([property: JsonPropertyName("name")] string Singer);
 internal record NetEasePlaylistTrackAlbum(

@@ -34,7 +34,6 @@ internal static partial class ProcessUtils
             return cachedAddress;
         }
 
-        // 1. Try standard .NET Process.Modules (fastest, but fails on some permission/bitness scenarios)
         try
         {
             using var process = Process.GetProcessById(pid);
@@ -48,10 +47,8 @@ internal static partial class ProcessUtils
         }
         catch
         {
-            // Ignore errors here, fallback to Win32 API
         }
 
-        // 2. Fallback to EnumProcessModulesEx (slower, but works across 32/64 bit boundaries)
         var fallbackHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
         if (fallbackHandle == IntPtr.Zero)
         {
@@ -116,7 +113,6 @@ internal static partial class ProcessUtils
             $"[DIAGNOSE] Process module cache cleanup: removed {keysToRemove} items, {ModuleAddressCache.Count} items remaining");
     }
 
-    #region Win32 API
     private const uint LIST_MODULES_ALL = 0x03;
     private const int PROCESS_QUERY_INFORMATION = 0x0400;
     private const int PROCESS_VM_READ = 0x0010;
@@ -146,5 +142,4 @@ internal static partial class ProcessUtils
         public uint SizeOfImage;
         public IntPtr EntryPoint;
     }
-    #endregion
 }
