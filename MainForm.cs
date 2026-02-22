@@ -341,7 +341,6 @@ internal class MainForm : Form
             if (_songTitleLabels[index].Text != defaultTitle) _songTitleLabels[index].Text = defaultTitle;
             if (_artistLabels[index].Text != "") _artistLabels[index].Text = "";
             if (_albumLabels[index].Text != "") _albumLabels[index].Text = "";
-            
             string statusText;
             switch (lastError)
             {
@@ -358,13 +357,11 @@ internal class MainForm : Form
                     statusText = "未运行";
                     break;
             }
-            
             if (_statusLabels[index].Text != statusText)
             {
                 _statusLabels[index].Text = statusText;
                 _statusLabels[index].ForeColor = lastError != RpcManager.ErrorCode.None ? Color.Red : Color.Gray;
             }
-
             if (_progressBars[index].Value != 0) _progressBars[index].Value = 0;
             if (_progressLabels[index].Text != "00:00 / 00:00") _progressLabels[index].Text = "00:00 / 00:00";
             if (_coverPictureBoxes[index].Image != null)

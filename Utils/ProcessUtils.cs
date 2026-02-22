@@ -1,17 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-
 namespace MusicRpc.Utils;
-
 internal static partial class ProcessUtils
 {
     private static readonly Dictionary<(int, string), nint> ModuleAddressCache = new();
     private static int _lastPid = -1;
     private static DateTime _lastCleanupTime = DateTime.Now;
-
     public static nint GetModuleBaseAddress(int pid, string moduleName)
     {
         if (pid != _lastPid)
@@ -19,7 +16,6 @@ internal static partial class ProcessUtils
             ModuleAddressCache.Clear();
             _lastPid = pid;
         }
-
         var now = DateTime.Now;
         if ((now - _lastCleanupTime) > PerformanceConfig.ProcessModuleCacheCleanupInterval ||
             ModuleAddressCache.Count > PerformanceConfig.ProcessModuleCacheMaxSize)
@@ -27,13 +23,11 @@ internal static partial class ProcessUtils
             CleanupCache();
             _lastCleanupTime = now;
         }
-
         var cacheKey = (pid, moduleName);
         if (ModuleAddressCache.TryGetValue(cacheKey, out var cachedAddress))
         {
             return cachedAddress;
         }
-
         try
         {
             using var process = Process.GetProcessById(pid);
@@ -48,14 +42,12 @@ internal static partial class ProcessUtils
         catch
         {
         }
-
         var fallbackHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
         if (fallbackHandle == IntPtr.Zero)
         {
              ModuleAddressCache[cacheKey] = IntPtr.Zero;
              return IntPtr.Zero;
         }
-
         try
         {
             var modules = new IntPtr[1024];
@@ -90,51 +82,39 @@ internal static partial class ProcessUtils
         {
              CloseHandle(fallbackHandle);
         }
-
         ModuleAddressCache[cacheKey] = IntPtr.Zero;
         return IntPtr.Zero;
     }
-
     private static void CleanupCache()
     {
         if (ModuleAddressCache.Count <= PerformanceConfig.ProcessModuleCacheMaxSize / 2)
             return;
-
         var keysToRemove = (int)(ModuleAddressCache.Count * 0.7);
         var cacheList = new List<(int, string)>(ModuleAddressCache.Keys);
         cacheList.Sort((a, b) => a.Item1.CompareTo(b.Item1));
-
         for (var i = 0; i < keysToRemove && i < cacheList.Count; i++)
         {
             ModuleAddressCache.Remove(cacheList[i]);
         }
-
         Debug.WriteLine(
             $"[DIAGNOSE] Process module cache cleanup: removed {keysToRemove} items, {ModuleAddressCache.Count} items remaining");
     }
-
     private const uint LIST_MODULES_ALL = 0x03;
     private const int PROCESS_QUERY_INFORMATION = 0x0400;
     private const int PROCESS_VM_READ = 0x0010;
-
     [LibraryImport("psapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool EnumProcessModulesEx(IntPtr hProcess, [Out] IntPtr[] lphModule, uint cb, out uint lpcbNeeded, uint dwFilterFlag);
-
     [LibraryImport("psapi.dll", EntryPoint = "GetModuleBaseNameW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetModuleBaseName(IntPtr hProcess, IntPtr hModule, [Out] char[] lpBaseName, uint nSize);
-
     [LibraryImport("psapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetModuleInformation(IntPtr hProcess, IntPtr hModule, out MODULEINFO lpmodinfo, uint cb);
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     private static partial IntPtr OpenProcess(int dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, int dwProcessId);
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(IntPtr hObject);
-
     [StructLayout(LayoutKind.Sequential)]
     private struct MODULEINFO
     {

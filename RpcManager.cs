@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -19,7 +19,6 @@ internal class RpcManager(SteamStatusManager steamManager)
         public DateTime LastChangeDetectedTime { get; set; } = DateTime.MinValue;
         public ErrorCode LastError { get; set; } = ErrorCode.None;
     }
-
     public enum ErrorCode
     {
         None,

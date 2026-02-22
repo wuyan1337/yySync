@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 namespace MusicRpc.Utils;
 internal static class Logger
 {

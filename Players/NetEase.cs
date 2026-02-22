@@ -27,14 +27,29 @@ internal sealed class NetEase : IMusicPlayer
     private NetEaseFmPlaylist? _cachedFmPlaylist;
     private DateTime _lastFmPlayWriteTime;
     private string? _cachedFmPlayHash;
+    private double _lastSchedule;
+    private string? _lastIdentity;
+    private DateTime _lastScheduleUpdateTime;
+    private bool _isPausedByHeuristic;
     private const string AudioPlayerPattern
         = "48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8D 0D ? ? ? ? E8 ? ? ? ? 90 48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8D 05 ? ? ? ? 48 8D A5 ? ? ? ? 5F 5D C3 CC CC CC CC CC 48 89 4C 24 ? 55 57 48 81 EC ? ? ? ? 48 8D 6C 24 ? 48 8D 7C 24";
     private const string AudioSchedulePattern = "66 0F 2E 0D ? ? ? ? 7A ? 75 ? 66 0F 2E 15";
-    
     private readonly nint _cloudMusicDllBase;
-    private const int Offset_Legacy_2_10_13 = 0xB2B124;
+    private readonly string _clientVersion;
     private readonly bool _isLegacyMemoryMode;
-
+    private static readonly Dictionary<string, (int current, int identity)> VersionOffsets = new()
+    {
+        { "2.7.1", (0x8C8AF8, 0x8E9044) },
+        { "2.10.3", (0xA39550, 0xAE8F80) },
+        { "2.10.5", (0xA47548, 0xAF6FC8) },
+        { "2.10.6", (0xA65568, 0xB15654) },
+        { "2.10.7", (0xA66568, 0xB16974) },
+        { "2.10.8", (0xA74570, 0xB24F28) },
+        { "2.10.10", (0xA77580, 0xB282CC) },
+        { "2.10.11", (0xA7A580, 0xB2BCB0) },
+        { "2.10.12", (0xA7A580, 0xB2BCB0) },
+        { "2.10.13", (0xA7A590, 0xB2BCD0) }
+    };
     public NetEase(int pid)
     {
         var fileDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -43,112 +58,114 @@ internal sealed class NetEase : IMusicPlayer
         _fmPlayPath = Path.Combine(fileDirectory, "fmPlay");
         _lastPlaylistWriteTime = DateTime.MinValue;
         _lastFmPlayWriteTime = DateTime.MinValue;
-
         var moduleBaseAddress = ProcessUtils.GetModuleBaseAddress(pid, "cloudmusic.dll");
         if (moduleBaseAddress == IntPtr.Zero)
         {
             throw new DllNotFoundException("Could not find cloudmusic.dll in the target process.");
         }
         _cloudMusicDllBase = moduleBaseAddress;
-
         _process = new ProcessMemory(pid);
+        _clientVersion = GetClientVersion(pid);
         if (Memory.FindPattern(AudioPlayerPattern, pid, moduleBaseAddress, out var app))
         {
             var textAddress = nint.Add(app, 3);
             var displacement = _process.ReadInt32(textAddress);
             _audioPlayerPointer = textAddress + displacement + sizeof(int);
         }
-
         if (Memory.FindPattern(AudioSchedulePattern, pid, moduleBaseAddress, out var asp))
         {
             var textAddress = nint.Add(asp, 4);
             var displacement = _process.ReadInt32(textAddress);
             _schedulePointer = textAddress + displacement + sizeof(int);
         }
-
         if (_audioPlayerPointer == nint.Zero || _schedulePointer == nint.Zero)
         {
             _isLegacyMemoryMode = true;
-            Debug.WriteLine("[NetEase] Memory pattern mismatch. Using Legacy Memory Mode (2.10.13+).");
+            Debug.WriteLine($"[NetEase] Memory pattern mismatch for version {_clientVersion}. Using Target Version Memory Mode.");
         }
     }
-
+    private string GetClientVersion(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            var versionInfo = FileVersionInfo.GetVersionInfo(process.MainModule!.FileName!);
+            return $"{versionInfo.FileMajorPart}.{versionInfo.FileMinorPart}.{versionInfo.FileBuildPart}";
+        }
+        catch
+        {
+            return "Unknown";
+        }
+    }
     public Task<PlayerInfo?> GetPlayerInfoAsync()
     {
+        PlayerInfo? info;
         if (_isLegacyMemoryMode)
         {
-            return Task.FromResult(GetLegacyMemoryPlayerInfo());
+            info = GetLegacyMemoryPlayerInfo();
         }
-
-        var status = GetPlayerStatus();
-        if (status == PlayStatus.Waiting)
+        else
         {
-            return Task.FromResult<PlayerInfo?>(null);
+            var identity = GetCurrentSongId();
+            if (string.IsNullOrEmpty(identity)) return Task.FromResult<PlayerInfo?>(null);
+            var status = GetPlayerStatus();
+            var schedule = GetSchedule();
+            var playerInfo = UpdateAndSearchPlaylist(identity, status);
+            playerInfo ??= UpdateAndSearchFmPlaylist(identity, status);
+            info = playerInfo != null ? playerInfo.Value with { Schedule = schedule } : null;
         }
-
-        var identity = GetCurrentSongId();
-        if (string.IsNullOrEmpty(identity))
-        {
-            return Task.FromResult<PlayerInfo?>(null);
-        }
-
-        var playerInfo = UpdateAndSearchPlaylist(identity, status);
-        if (playerInfo != null)
-        {
-            return Task.FromResult(playerInfo);
-        }
-
-        playerInfo = UpdateAndSearchFmPlaylist(identity, status);
-        return Task.FromResult(playerInfo);
+        return Task.FromResult<PlayerInfo?>(info != null ? ApplyHeuristicPause(info.Value) : null);
     }
-
+    private PlayerInfo ApplyHeuristicPause(PlayerInfo info)
+    {
+        if (info.Identity == _lastIdentity)
+        {
+            if (Math.Abs(info.Schedule - _lastSchedule) > 0.01)
+            {
+                _lastSchedule = info.Schedule;
+                _lastScheduleUpdateTime = DateTime.Now;
+                _isPausedByHeuristic = false;
+            }
+            else if ((DateTime.Now - _lastScheduleUpdateTime).TotalSeconds > 1.5)
+            {
+                _isPausedByHeuristic = true;
+            }
+        }
+        else
+        {
+            _lastIdentity = info.Identity;
+            _lastSchedule = info.Schedule;
+            _lastScheduleUpdateTime = DateTime.Now;
+            _isPausedByHeuristic = false;
+        }
+        return info.Pause || _isPausedByHeuristic ? info with { Pause = true } : info;
+    }
     private PlayerInfo? GetLegacyMemoryPlayerInfo()
     {
         try
         {
-            var ptr1 = _process.ReadInt32(_cloudMusicDllBase, Offset_Legacy_2_10_13);
-            if (ptr1 == 0) return GetLegacyWindowPlayerInfo();
-
-            var stringAddr = _process.ReadInt32((nint)ptr1);
-            if (stringAddr == 0) return GetLegacyWindowPlayerInfo();
-
-            var buffer = _process.ReadBytes((nint)stringAddr, 256);
-            var title = Encoding.Unicode.GetString(buffer);
-            var nullIndex = title.IndexOf('\0');
-            if (nullIndex >= 0) title = title.Substring(0, nullIndex);
-
-            if (string.IsNullOrEmpty(title)) return GetLegacyWindowPlayerInfo();
-
-            string artist = "Unknown Artist";
-            using (var process = Process.GetProcessById(_process.ProcessId))
+            var match = VersionOffsets.Keys.OrderByDescending(k => k.Length)
+                .FirstOrDefault(k => _clientVersion.StartsWith(k));
+            if (match == null) return GetLegacyWindowPlayerInfo();
+            var (currentOffset, idOffset) = VersionOffsets[match];
+            var idArrayPtr = (nint)_process.ReadUInt32(_cloudMusicDllBase, idOffset);
+            if (idArrayPtr == nint.Zero) return GetLegacyWindowPlayerInfo();
+            var idBuffer = _process.ReadBytes(idArrayPtr, 20);
+            var idFull = Encoding.Unicode.GetString(idBuffer);
+            var identity = idFull.Split('_')[0].Replace("\0", "");
+            if (string.IsNullOrEmpty(identity) || identity.Any(c => char.IsControl(c) && c != '\0'))
             {
-                 var winTitle = process.MainWindowTitle;
-                 if (!string.IsNullOrEmpty(winTitle) && winTitle.Contains(" - "))
-                 {
-                     var parts = winTitle.Split(" - ");
-                     if (parts.Length > 1) artist = parts[1];
-                 }
+                return GetLegacyWindowPlayerInfo();
             }
-
-            var songTitle = title;
-            if (!string.IsNullOrEmpty(title) && title.Contains(" - "))
+            var schedule = _process.ReadDouble(_cloudMusicDllBase, currentOffset);
+            var status = PlayStatus.Playing; 
+            var playerInfo = UpdateAndSearchPlaylist(identity, status);
+            playerInfo ??= UpdateAndSearchFmPlaylist(identity, status);
+            if (playerInfo.HasValue)
             {
-                var p = title.Split(new[] { " - " }, StringSplitOptions.None);
-                if (p.Length > 0) songTitle = p[0];
+                return playerInfo.Value with { Schedule = schedule, Pause = false };
             }
-
-            return new PlayerInfo
-            {
-                Identity = "mem_" + title.GetHashCode(),
-                Title = songTitle,
-                Artists = artist,
-                Album = "NetEase Cloud Music",
-                Cover = "",
-                Duration = 0,
-                Schedule = 0,
-                Pause = false,
-                Url = ""
-            };
+            return GetLegacyWindowPlayerInfo();
         }
         catch (Exception ex)
         {
@@ -156,23 +173,19 @@ internal sealed class NetEase : IMusicPlayer
             return GetLegacyWindowPlayerInfo();
         }
     }
-
     private PlayerInfo? GetLegacyWindowPlayerInfo()
     {
         try
         {
             using var process = Process.GetProcessById(_process.ProcessId);
             var title = process.MainWindowTitle;
-            
             if (string.IsNullOrEmpty(title) || title == "网易云音乐" || title == "NetEase Cloud Music")
             {
                 return null; 
             }
-
             var parts = title.Split(" - ");
             var song = parts.Length > 0 ? parts[0] : title;
             var artist = parts.Length > 1 ? parts[1] : "Unknown Artist";
-
             return new PlayerInfo
             {
                 Identity = "legacy_" + title.GetHashCode(),
@@ -232,7 +245,7 @@ internal sealed class NetEase : IMusicPlayer
                 Artists = string.Join(',', track.Artists.Select(x => x.Singer)),
                 Album = track.Album.Name,
                 Cover = track.Album.Cover,
-                Duration = GetSongDuration(),
+                Duration = track.Duration / 1000.0,
                 Schedule = GetSchedule(),
                 Pause = status == PlayStatus.Paused,
                 Url = $"https://music.163.com/#/song?id={identity}",
@@ -285,7 +298,7 @@ internal sealed class NetEase : IMusicPlayer
                 Artists = string.Join(',', currentTrackItem.Artists.Select(x => x.Singer)),
                 Album = currentTrackItem.Album.Name,
                 Cover = currentTrackItem.Album.Cover,
-                Duration = GetSongDuration(),
+                Duration = currentTrackItem.Duration / 1000.0,
                 Schedule = GetSchedule(),
                 Pause = status == PlayStatus.Paused,
                 Url = $"https://music.163.com/#/song?id={identity}",
@@ -401,10 +414,42 @@ internal sealed class NetEase : IMusicPlayer
         else
         {
             var strAddress = _process.ReadInt64((nint)strPtr);
+            if (strAddress == 0) return string.Empty;
             strBuffer = _process.ReadBytes((nint)strAddress, (int)strLength);
         }
         var str = Encoding.UTF8.GetString(strBuffer);
-        return string.IsNullOrEmpty(str) ? string.Empty : str[..str.IndexOf('_')];
+        if (string.IsNullOrEmpty(str) || str.Any(c => char.IsControl(c) && c != '\0'))
+        {
+            str = Encoding.Unicode.GetString(strBuffer);
+        }
+        if (string.IsNullOrEmpty(str)) return string.Empty;
+        var separatorIndex = str.IndexOf('_');
+        return separatorIndex > 0 ? str[..separatorIndex] : str.Replace("\0", "");
+    }
+}
+internal class FlexibleDurationConverter : JsonConverter<double>
+{
+    public override double Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            return reader.GetDouble();
+        }
+        if (reader.TokenType == JsonTokenType.String && double.TryParse(reader.GetString(), out var result))
+        {
+            return result;
+        }
+        using var doc = JsonDocument.ParseValue(ref reader);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("dt", out var dtProp) && dtProp.ValueKind == JsonValueKind.Number)
+        {
+            return dtProp.GetDouble();
+        }
+        return 0;
+    }
+    public override void Write(Utf8JsonWriter writer, double value, JsonSerializerOptions options)
+    {
+        writer.WriteNumberValue(value);
     }
 }
 internal record NetEasePlaylistTrackArtist([property: JsonPropertyName("name")] string Singer);
@@ -415,7 +460,8 @@ internal record NetEasePlaylistTrack(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("artists")]
     NetEasePlaylistTrackArtist[] Artists,
-    [property: JsonPropertyName("album")] NetEasePlaylistTrackAlbum Album);
+    [property: JsonPropertyName("album")] NetEasePlaylistTrackAlbum Album,
+    [property: JsonPropertyName("duration"), JsonConverter(typeof(FlexibleDurationConverter))] double Duration);
 internal record NetEasePlaylistItem(
     [property: JsonPropertyName("id")] string Identity,
     [property: JsonPropertyName("track")] NetEasePlaylistTrack Track);
@@ -428,5 +474,6 @@ internal record NetEaseFmPlaylistItem(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("artists")]
     NetEasePlaylistTrackArtist[] Artists,
-    [property: JsonPropertyName("album")] NetEasePlaylistTrackAlbum Album
+    [property: JsonPropertyName("album")] NetEasePlaylistTrackAlbum Album,
+    [property: JsonPropertyName("duration"), JsonConverter(typeof(FlexibleDurationConverter))] double Duration
 );
