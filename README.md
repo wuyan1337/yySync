@@ -17,7 +17,8 @@
 1. 确保系统已安装 **[.NET 9](https://dotnet.microsoft.com/download/dotnet/9.0)** 运行库  
 2. 下载最新版 `yySync.exe` 运行  
 3. 首次运行时需登录 Steam 帐号（支持 Steam Guard / 手机验证）  
-4. 登录成功后，打开音乐播放器即可自动同步状态到 Steam  
+4. 登录成功后，打开音乐播放器即可自动同步状态到 Steam
+5. 洛雪音乐用户请注意 请在洛雪音乐 - 设置 - 开放API - 启用开放API服务，允许来自局域网的访问
 
 ---
 
