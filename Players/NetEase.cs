@@ -31,25 +31,14 @@ internal sealed class NetEase : IMusicPlayer
     private string? _lastIdentity;
     private DateTime _lastScheduleUpdateTime;
     private bool _isPausedByHeuristic;
+    private bool _hasScheduleChanged;
     private const string AudioPlayerPattern
         = "48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8D 0D ? ? ? ? E8 ? ? ? ? 90 48 8D 0D ? ? ? ? E8 ? ? ? ? 48 8D 05 ? ? ? ? 48 8D A5 ? ? ? ? 5F 5D C3 CC CC CC CC CC 48 89 4C 24 ? 55 57 48 81 EC ? ? ? ? 48 8D 6C 24 ? 48 8D 7C 24";
     private const string AudioSchedulePattern = "66 0F 2E 0D ? ? ? ? 7A ? 75 ? 66 0F 2E 15";
     private readonly nint _cloudMusicDllBase;
     private readonly string _clientVersion;
     private readonly bool _isLegacyMemoryMode;
-    private static readonly Dictionary<string, (int current, int identity)> VersionOffsets = new()
-    {
-        { "2.7.1", (0x8C8AF8, 0x8E9044) },
-        { "2.10.3", (0xA39550, 0xAE8F80) },
-        { "2.10.5", (0xA47548, 0xAF6FC8) },
-        { "2.10.6", (0xA65568, 0xB15654) },
-        { "2.10.7", (0xA66568, 0xB16974) },
-        { "2.10.8", (0xA74570, 0xB24F28) },
-        { "2.10.10", (0xA77580, 0xB282CC) },
-        { "2.10.11", (0xA7A580, 0xB2BCB0) },
-        { "2.10.12", (0xA7A580, 0xB2BCB0) },
-        { "2.10.13", (0xA7A590, 0xB2BCD0) }
-    };
+
     public NetEase(int pid)
     {
         var fileDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -102,17 +91,35 @@ internal sealed class NetEase : IMusicPlayer
         PlayerInfo? info;
         if (_isLegacyMemoryMode)
         {
-            info = GetLegacyMemoryPlayerInfo();
+            info = GetLegacyWindowPlayerInfo();
         }
         else
         {
             var identity = GetCurrentSongId();
             if (string.IsNullOrEmpty(identity)) return Task.FromResult<PlayerInfo?>(null);
+
             var status = GetPlayerStatus();
             var schedule = GetSchedule();
+
             var playerInfo = UpdateAndSearchPlaylist(identity, status);
             playerInfo ??= UpdateAndSearchFmPlaylist(identity, status);
-            info = playerInfo != null ? playerInfo.Value with { Schedule = schedule } : null;
+            if (playerInfo != null)
+            {
+                var duration = playerInfo.Value.Duration;
+                if (duration <= 0)
+                {
+                    duration = GetSongDuration();
+                }
+                info = playerInfo.Value with 
+                { 
+                    Schedule = schedule,
+                    Duration = duration
+                };
+            }
+            else
+            {
+                info = null;
+            }
         }
         return Task.FromResult<PlayerInfo?>(info != null ? ApplyHeuristicPause(info.Value) : null);
     }
@@ -125,8 +132,9 @@ internal sealed class NetEase : IMusicPlayer
                 _lastSchedule = info.Schedule;
                 _lastScheduleUpdateTime = DateTime.Now;
                 _isPausedByHeuristic = false;
+                _hasScheduleChanged = true;
             }
-            else if ((DateTime.Now - _lastScheduleUpdateTime).TotalSeconds > 1.5)
+            else if (_hasScheduleChanged && (DateTime.Now - _lastScheduleUpdateTime).TotalSeconds > 1.5)
             {
                 _isPausedByHeuristic = true;
             }
@@ -137,42 +145,12 @@ internal sealed class NetEase : IMusicPlayer
             _lastSchedule = info.Schedule;
             _lastScheduleUpdateTime = DateTime.Now;
             _isPausedByHeuristic = false;
+            _hasScheduleChanged = false;
         }
+
         return info.Pause || _isPausedByHeuristic ? info with { Pause = true } : info;
     }
-    private PlayerInfo? GetLegacyMemoryPlayerInfo()
-    {
-        try
-        {
-            var match = VersionOffsets.Keys.OrderByDescending(k => k.Length)
-                .FirstOrDefault(k => _clientVersion.StartsWith(k));
-            if (match == null) return GetLegacyWindowPlayerInfo();
-            var (currentOffset, idOffset) = VersionOffsets[match];
-            var idArrayPtr = (nint)_process.ReadUInt32(_cloudMusicDllBase, idOffset);
-            if (idArrayPtr == nint.Zero) return GetLegacyWindowPlayerInfo();
-            var idBuffer = _process.ReadBytes(idArrayPtr, 20);
-            var idFull = Encoding.Unicode.GetString(idBuffer);
-            var identity = idFull.Split('_')[0].Replace("\0", "");
-            if (string.IsNullOrEmpty(identity) || identity.Any(c => char.IsControl(c) && c != '\0'))
-            {
-                return GetLegacyWindowPlayerInfo();
-            }
-            var schedule = _process.ReadDouble(_cloudMusicDllBase, currentOffset);
-            var status = PlayStatus.Playing; 
-            var playerInfo = UpdateAndSearchPlaylist(identity, status);
-            playerInfo ??= UpdateAndSearchFmPlaylist(identity, status);
-            if (playerInfo.HasValue)
-            {
-                return playerInfo.Value with { Schedule = schedule, Pause = false };
-            }
-            return GetLegacyWindowPlayerInfo();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[NetEase] Legacy memory mode error: {ex.Message}");
-            return GetLegacyWindowPlayerInfo();
-        }
-    }
+
     private PlayerInfo? GetLegacyWindowPlayerInfo()
     {
         try
