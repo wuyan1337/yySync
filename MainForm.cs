@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
@@ -212,7 +212,16 @@ internal class MainForm : Form
     private void SettingsButton_Click(object? sender, EventArgs e)
     {
         using var settingsForm = new SettingsForm();
-        settingsForm.ShowDialog(this);
+        var result = settingsForm.ShowDialog(this);
+        if (result == DialogResult.Abort)
+        {
+            var session = Program.GetSessionManager();
+            if (session != null)
+            {
+                using var loginForm = new SteamLoginForm(session);
+                loginForm.ShowDialog(this);
+            }
+        }
     }
     private void UpdateTimer_Tick(object? sender, EventArgs e)
     {

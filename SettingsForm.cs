@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -267,13 +267,22 @@ internal class SettingsForm : Form
         const int buttonWidth = 80;
         const int buttonHeight = 30;
         const int spacing = 10;
-        const int totalWidth = buttonWidth * 3 + spacing * 2;
-        var startX = (ClientSize.Width - totalWidth) / 2;
+        var logoutButton = new Button
+        {
+            Text = "退出登录",
+            Size = new Size(buttonWidth, buttonHeight),
+            Location = new Point(15, 10),
+            BackColor = Color.White,
+            ForeColor = Color.Red
+        };
+        logoutButton.Click += LogoutButton_Click;
+        const int rightTotalWidth = buttonWidth * 3 + spacing * 2;
+        var rightStartX = ClientSize.Width - rightTotalWidth - 20;
         _okButton = new Button
         {
             Text = "确定",
             Size = new Size(buttonWidth, buttonHeight),
-            Location = new Point(startX, 10),
+            Location = new Point(rightStartX, 10),
             DialogResult = DialogResult.OK,
             BackColor = Color.White
         };
@@ -281,7 +290,7 @@ internal class SettingsForm : Form
         {
             Text = "取消",
             Size = new Size(buttonWidth, buttonHeight),
-            Location = new Point(startX + buttonWidth + spacing, 10),
+            Location = new Point(rightStartX + buttonWidth + spacing, 10),
             DialogResult = DialogResult.Cancel,
             BackColor = Color.White
         };
@@ -289,13 +298,13 @@ internal class SettingsForm : Form
         {
             Text = "应用",
             Size = new Size(buttonWidth, buttonHeight),
-            Location = new Point(startX + (buttonWidth + spacing) * 2, 10),
+            Location = new Point(rightStartX + (buttonWidth + spacing) * 2, 10),
             BackColor = Color.White
         };
         _okButton.Click += OkButton_Click;
         _cancelButton.Click += CancelButton_Click;
         _applyButton.Click += ApplyButton_Click;
-        buttonPanel.Controls.AddRange([_okButton, _cancelButton, _applyButton]);
+        buttonPanel.Controls.AddRange([logoutButton, _okButton, _cancelButton, _applyButton]);
         return buttonPanel;
     }
     private void RefreshMemoryInfo_Click(object? sender, EventArgs e)
@@ -406,5 +415,18 @@ internal class SettingsForm : Form
     private void ApplyButton_Click(object? sender, EventArgs e)
     {
         SaveSettings();
+    }
+    private void LogoutButton_Click(object? sender, EventArgs e)
+    {
+        var result = MessageBox.Show(
+            "确定要退出登录吗？\n退出后需要重新打开程序并输入 Steam 账号密码。",
+            "退出登录", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (result != DialogResult.Yes) return;
+        var settings = Configurations.Instance.Settings;
+        settings.SteamUsername = "";
+        settings.SteamRefreshToken = "";
+        settings.SteamGuardData = "";
+        Configurations.Instance.Save();
+        Application.Exit();
     }
 }

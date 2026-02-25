@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -38,7 +38,6 @@ internal sealed class NetEase : IMusicPlayer
     private readonly nint _cloudMusicDllBase;
     private readonly string _clientVersion;
     private readonly bool _isLegacyMemoryMode;
-
     public NetEase(int pid)
     {
         var fileDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -97,10 +96,8 @@ internal sealed class NetEase : IMusicPlayer
         {
             var identity = GetCurrentSongId();
             if (string.IsNullOrEmpty(identity)) return Task.FromResult<PlayerInfo?>(null);
-
             var status = GetPlayerStatus();
             var schedule = GetSchedule();
-
             var playerInfo = UpdateAndSearchPlaylist(identity, status);
             playerInfo ??= UpdateAndSearchFmPlaylist(identity, status);
             if (playerInfo != null)
@@ -147,10 +144,8 @@ internal sealed class NetEase : IMusicPlayer
             _isPausedByHeuristic = false;
             _hasScheduleChanged = false;
         }
-
         return info.Pause || _isPausedByHeuristic ? info with { Pause = true } : info;
     }
-
     private PlayerInfo? GetLegacyWindowPlayerInfo()
     {
         try

@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Reflection;
 namespace MusicRpc.Utils;
 internal static class AppResource

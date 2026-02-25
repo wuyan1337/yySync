@@ -1,4 +1,4 @@
-namespace MusicRpc.Models;
+﻿namespace MusicRpc.Models;
 internal readonly record struct PlayerInfo
 {
     public required string Identity { get; init; }

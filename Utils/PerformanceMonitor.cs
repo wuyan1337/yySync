@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using MusicRpc.Win32Api;
 namespace MusicRpc.Utils;

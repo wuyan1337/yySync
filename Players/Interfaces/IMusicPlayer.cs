@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using MusicRpc.Models;
 namespace MusicRpc.Players.Interfaces;
 internal interface IMusicPlayer
