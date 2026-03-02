@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Text;
 using MusicRpc.Models;
 namespace MusicRpc.Utils;

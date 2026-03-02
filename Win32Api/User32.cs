@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 namespace MusicRpc.Win32Api;
 internal static partial class User32

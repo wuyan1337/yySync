@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -61,9 +61,16 @@ internal static class Program
                 loginForm.ShowDialog();
                 loggedIn = loginForm.LoginSucceeded;
             }
-            if (!loggedIn)
+            if (loggedIn)
             {
-                return;
+                Debug.WriteLine("[Program] Steam 登录成功，开始同步音乐状态");
+            }
+            else
+            {
+                MessageBox.Show(
+                    "未登录 Steam，音乐状态将不会同步到好友列表。\n\n" +
+                    "你可以在设置中重新登录。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
         _steamManager = new SteamStatusManager(_sessionManager);
@@ -105,12 +112,7 @@ internal static class Program
         {
             using var settingsForm = new SettingsForm();
             settingsForm.StartPosition = FormStartPosition.CenterScreen;
-            var result = settingsForm.ShowDialog();
-            if (result == DialogResult.Abort && _sessionManager != null)
-            {
-                using var loginForm = new SteamLoginForm(_sessionManager);
-                loginForm.ShowDialog();
-            }
+            settingsForm.ShowDialog();
         };
         showMainWindowItem.Click += (_, _) =>
         {

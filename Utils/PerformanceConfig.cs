@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 namespace MusicRpc.Utils;
 internal static class PerformanceConfig
 {

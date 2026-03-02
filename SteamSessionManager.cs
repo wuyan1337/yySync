@@ -1,8 +1,7 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using MusicRpc.Utils;
 using SteamKit2;
 using SteamKit2.Authentication;
 using SteamKit2.Internal;
@@ -34,14 +33,14 @@ internal class SteamSessionManager : IDisposable
         _steamFriends = _steamClient.GetHandler<SteamFriends>()!;
         _callbackManager.Subscribe<SteamClient.ConnectedCallback>(_ =>
         {
-            Logger.Steam("已连接到 Steam");
+            Debug.WriteLine("[SteamSession] 已连接到 Steam");
             _connectedEvent.Set();
         });
         _callbackManager.Subscribe<SteamClient.DisconnectedCallback>(cb =>
         {
             IsLoggedOn = false;
             _connectedEvent.Reset();
-            Logger.Steam($"已断开连接 (UserInitiated={cb.UserInitiated})");
+            Debug.WriteLine($"[SteamSession] 已断开连接 (UserInitiated={cb.UserInitiated})");
             if (!cb.UserInitiated && _isRunning)
             {
                 Task.Run(async () =>
@@ -49,7 +48,7 @@ internal class SteamSessionManager : IDisposable
                     await Task.Delay(5000);
                     if (_isRunning)
                     {
-                        Logger.Steam("尝试自动重连...");
+                        Debug.WriteLine("[SteamSession] 尝试自动重连...");
                         _steamClient?.Connect();
                     }
                 });
@@ -61,25 +60,25 @@ internal class SteamSessionManager : IDisposable
             {
                 IsLoggedOn = true;
                 LoginError = null;
-                Logger.Steam($"登录成功! SteamID: {cb.ClientSteamID}");
+                Debug.WriteLine($"[SteamSession] 登录成功! SteamID: {cb.ClientSteamID}");
                 _steamFriends?.SetPersonaState(EPersonaState.Online);
-                Logger.Steam("已设置在线状态");
+                Debug.WriteLine("[SteamSession] 已设置在线状态");
             }
             else
             {
                 IsLoggedOn = false;
                 LoginError = cb.Result.ToString();
-                Logger.Steam($"登录失败: {cb.Result} / {cb.ExtendedResult}");
+                Debug.WriteLine($"[SteamSession] 登录失败: {cb.Result} / {cb.ExtendedResult}");
             }
         });
         _callbackManager.Subscribe<SteamUser.LoggedOffCallback>(cb =>
         {
             IsLoggedOn = false;
-            Logger.Steam($"已登出: {cb.Result}");
+            Debug.WriteLine($"[SteamSession] 已登出: {cb.Result}");
         });
         _callbackTask = Task.Run(() => CallbackLoop(_cts.Token));
         _steamClient.Connect();
-        Logger.Steam("正在连接到 Steam...");
+        Debug.WriteLine("[SteamSession] 正在连接到 Steam...");
     }
     public bool WaitForConnection(int timeoutMs = 8000)
     {
@@ -150,13 +149,13 @@ internal class SteamSessionManager : IDisposable
         catch (AuthenticationException ex)
         {
             LoginError = $"认证失败: {ex.Result} - {ex.Message}";
-            Logger.Steam(LoginError);
+            Debug.WriteLine($"[SteamSession] {LoginError}");
             return false;
         }
         catch (Exception ex)
         {
             LoginError = $"登录异常: {ex.Message}";
-            Logger.Steam(LoginError);
+            Debug.WriteLine($"[SteamSession] {LoginError}");
             return false;
         }
     }
@@ -191,7 +190,7 @@ internal class SteamSessionManager : IDisposable
             if (IsLoggedOn) return true;
             if (LoginError != null) break;
         }
-        Logger.Steam("Token 登录失败");
+        Debug.WriteLine("[SteamSession] Token 登录失败");
         Configurations.Instance.Settings.SteamRefreshToken = "";
         Configurations.Instance.Save();
         return false;
@@ -200,7 +199,7 @@ internal class SteamSessionManager : IDisposable
     {
         if (!IsLoggedOn || _steamClient == null) return Task.CompletedTask;
         if (gameName == _currentGameName) return Task.CompletedTask;
-        Logger.Steam($"正在设置游戏名称: '{gameName}'");
+        Debug.WriteLine($"[SteamSession] 正在设置游戏名称: '{gameName}'");
         if (!string.IsNullOrEmpty(gameName))
         {
             var request = new ClientMsgProtobuf<CMsgClientGamesPlayed>(EMsg.ClientGamesPlayedWithDataBlob)
@@ -213,10 +212,14 @@ internal class SteamSessionManager : IDisposable
             request.Body.games_played.Add(new CMsgClientGamesPlayed.GamePlayed
             {
                 game_extra_info = gameName,
-                game_id = new GameID(480)
+                game_id = new GameID
+                {
+                    AppType = GameID.GameType.Shortcut,
+                    ModID = uint.MaxValue
+                }
             });
             _steamClient.Send(request);
-            Logger.Steam($"CMsgClientGamesPlayed 已发送: '{gameName}'");
+            Debug.WriteLine($"[SteamSession] CMsgClientGamesPlayed 已发送: '{gameName}'");
         }
         _currentGameName = gameName;
         return Task.CompletedTask;
@@ -233,7 +236,7 @@ internal class SteamSessionManager : IDisposable
         };
         _steamClient.Send(request);
         _currentGameName = string.Empty;
-        Logger.Steam("游戏名称已清除");
+        Debug.WriteLine("[SteamSession] 游戏名称已清除");
     }
     public void SubmitSteamGuardCode(string code)
     {

@@ -1,9 +1,8 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using MusicRpc.Models;
-using MusicRpc.Utils;
 namespace MusicRpc;
 internal class SteamStatusManager
 {
@@ -25,11 +24,11 @@ internal class SteamStatusManager
         {
             await _session.SetGameNameAsync(newName).ConfigureAwait(false);
             _lastSetName = newName;
-            Logger.Steam($"状态已更新: {newName}");
+            Debug.WriteLine($"[SteamStatus] 状态已更新: {newName}");
         }
         catch (Exception ex)
         {
-            Logger.Steam($"更新状态失败: {ex.Message}");
+            Debug.WriteLine($"[SteamStatus] 更新状态失败: {ex.Message}");
         }
     }
     public void ClearStatus()
@@ -37,7 +36,7 @@ internal class SteamStatusManager
         if (!_session.IsLoggedOn) return;
         _session.ClearGameName();
         _lastSetName = string.Empty;
-        Logger.Steam("状态已清除");
+        Debug.WriteLine("[SteamStatus] 状态已清除");
     }
     public string GetStatusPreview(PlayerInfo? info, string playerName)
     {
