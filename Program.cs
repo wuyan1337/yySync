@@ -27,6 +27,7 @@ internal static class Program
             MessageBox.Show("yySync is already running.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
+        Win32Api.AutoStart.MigrateLegacyRegistration();
         using var cts = new CancellationTokenSource();
         var token = cts.Token;
         _sessionManager = new SteamSessionManager();
